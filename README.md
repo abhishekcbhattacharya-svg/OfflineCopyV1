@@ -5,10 +5,10 @@ This program is for educational and research purpose only!
 Please enter y/Y to continue.
 
 Please enter website.
-
 https://spicaworks.in/
-Please enter folder.
 
+Please enter folder.
 C:\MachineContent\Snap
+
 Website:https://spicaworks.in/
 Website completed
