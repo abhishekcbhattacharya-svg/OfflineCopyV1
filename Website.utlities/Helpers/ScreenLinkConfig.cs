@@ -13,5 +13,6 @@ namespace Website.utlities.Helpers
         public int? NestedLevel { get; set; }
         public bool AllowExternal { get; set; }
         public bool NestedFolder { get; set; }
+        public required int Timeout { get; set; }
     }
 }

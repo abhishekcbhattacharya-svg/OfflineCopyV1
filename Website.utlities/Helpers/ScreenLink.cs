@@ -18,7 +18,7 @@ namespace Website.utlities.Helpers
             _taskPageDI = taskPageDI;
         }
 
-        private async Task _AddToQ(IPage page, BigInteger level)
+        private async Task _AddToQ(IPage page, BigInteger level, ScreenLinkConfig screenLinkConfig)
         {
             var _links = await page.QuerySelectorAllAsync("a[href]");
             foreach (var _link in _links)
@@ -28,12 +28,37 @@ namespace Website.utlities.Helpers
                 {
                     // Resolve to a fully qualified URL
                     var fullUrl = new Uri(new Uri(page.Url), href).AbsoluteUri;
-                    links.TryAdd(fullUrl, level + 1);
+
+                    if (Path.HasExtension(fullUrl) == false)
+                    {
+                        if (screenLinkConfig.AllowExternal == false)
+                        {
+                            if (fullUrl.StartsWith(screenLinkConfig.Domain))
+                            {
+                                _AddUrl(fullUrl, level + 1);
+
+                            }
+                        }
+                        else
+                        {
+                            _AddUrl(fullUrl, level + 1);
+                        }
+                    }
+                    //links.TryAdd(fullUrl, level + 1);
+
                 }
             }
         }
 
-        private string _MergeUrl(string domain, string url) 
+        private void _AddUrl(string fullUrl, BigInteger level)
+        {
+            if (!links.TryGetValue(fullUrl, out BigInteger _))
+            {
+                links.TryAdd(fullUrl, level);
+            }
+        }
+
+        private string _MergeUrl(string domain, string url)
         {
             string host = "https://";
             if (url.StartsWith(host))
@@ -50,30 +75,78 @@ namespace Website.utlities.Helpers
         private async Task _Screen(IPage page, ScreenLinkConfig screenLinkConfig, string url, Action<Exception> logEx)
         {
             string _url = _MergeUrl(screenLinkConfig.Domain, url);
-            string _file = screenLinkConfig.NestedFolder? _NestedFile(screenLinkConfig.SnapshotFolder, url): _FlatFile(screenLinkConfig.SnapshotFolder, url);
+            string _file = screenLinkConfig.NestedFolder ? _NestedFile(screenLinkConfig.SnapshotFolder, _url) : _FlatFile(screenLinkConfig.SnapshotFolder, _url);
             if (links.TryGetValue(url, out BigInteger level))
             {
                 if (level == _KeyIndex)
                 {
-                    if (Path.HasExtension(_url) == false && _url.StartsWith(screenLinkConfig.Domain) == !screenLinkConfig.AllowExternal)
+                    if (Path.HasExtension(_url) == false)
                     {
-                        try
+                        if (screenLinkConfig.AllowExternal == false)
                         {
-                            await page.GotoAsync(_url);
-                            await page.ScreenshotAsync(new PageScreenshotOptions
+                            if (_url.StartsWith(screenLinkConfig.Domain))
                             {
-                                FullPage = true,
-                                Path = $"{_file}.png"
-                            });
-                            await _AddToQ(page, level);
+                                await _ScreenUrl(page, screenLinkConfig, logEx, _url, _file, level);
+                            }
                         }
-                        catch (Exception ex)
+                        else
                         {
-                            logEx(ex);
-                            //throw;
+                            await _ScreenUrl(page, screenLinkConfig, logEx, _url, _file, level);
                         }
                     }
                 }
+            }
+        }
+
+        private async Task _ScreenUrl(IPage page, ScreenLinkConfig screenLinkConfig, Action<Exception> logEx, string _url, string _file, BigInteger level)
+        {
+            try
+            {
+                Console.WriteLine($"Url: {_url}");
+                await page.GotoAsync(_url);
+                bool attempt = false;
+                try
+                {
+                    while (!attempt)
+                    {
+                        await page.WaitForLoadStateAsync(LoadState.Load);
+                        attempt = true;
+                    }
+                }
+                catch(Exception ex)
+                {
+                    await Task.Delay(500);
+                    //try
+                    //{
+                    //    await page.WaitForLoadStateAsync(
+                    //    LoadState.NetworkIdle,
+                    //    new PageWaitForLoadStateOptions { Timeout = screenLinkConfig.Timeout * 1000 });
+                    //}
+                    //catch (Exception)
+                    //{
+                    //    await page.WaitForLoadStateAsync(LoadState.Load);
+                    //}
+                }
+                //await page.PdfAsync(new PagePdfOptions
+                //{
+                //    Path = $"{_file}.pdf",
+                //    Format = "A4"
+                //});
+
+                await page.ScreenshotAsync(new PageScreenshotOptions
+                {
+                    FullPage = _url.Contains('#') == false,
+                    Quality = 70,
+                    //OmitBackground = true,
+                    Type = ScreenshotType.Jpeg,
+                    Path = $"{_file}.jpg"
+                });
+                await _AddToQ(page, level, screenLinkConfig);
+            }
+            catch (Exception ex)
+            {
+                logEx(ex);
+                //throw;
             }
         }
 
@@ -90,7 +163,7 @@ namespace Website.utlities.Helpers
             return _file;
         }
 
-        private string _NestedFile(string folder, string url) 
+        private string _NestedFile(string folder, string url)
         {
             var uri = new Uri(url);
 
@@ -126,7 +199,10 @@ namespace Website.utlities.Helpers
             {
                 fullPath = Path.Combine(fullPath, $"fragment_{fragmentPart}");
             }
-            return fullPath;
+            //return fullPath;
+            string _file = Path.Combine(folder, fullPath);
+            return _file;
+            
         }
 
         private string Sanitize(string input)
@@ -143,6 +219,9 @@ namespace Website.utlities.Helpers
                 while (screenLinkConfig.NestedLevel.HasValue == false || (screenLinkConfig.NestedLevel.HasValue && screenLinkConfig.NestedLevel.Value >= _KeyIndex))
                 {
                     var urls = links.Where(li => li.Value == _KeyIndex).Select(ki => ki.Key).ToList();
+
+                    Console.WriteLine($"Screens {urls.Count} at Level {_KeyIndex}");
+
                     if (urls.Count == 0)
                     {
                         break;

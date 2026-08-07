@@ -49,6 +49,9 @@ if (TryRead("website", out string? website) && TryRead("folder", out string? fol
     { 
         Domain = website,
         SnapshotFolder = folder,
+        Timeout = 60,
+        NestedLevel = 2,
+        NestedFolder = true
     };
     screenLink.ExecuteAsync(config, logEx).Wait();
     Console.WriteLine("Website completed");
